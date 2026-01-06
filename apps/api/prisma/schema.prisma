@@ -1,0 +1,332 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PlanTier {
+  FREE
+  PRO
+  TEAM
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  memberships Membership[]
+  auditLogs   AuditLog[]
+  sessions    Session[]
+  createdPromotionRequests PromotionRequest[] @relation("promotion_creator")
+  reviewedPromotionRequests PromotionRequest[] @relation("promotion_reviewer")
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  tokenHash String   @map("token") @unique
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model MagicLinkToken {
+  id        String   @id @default(uuid())
+  email     String
+  tokenHash String   @map("token_hash") @unique
+  expiresAt DateTime @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([email])
+  @@map("magic_link_tokens")
+}
+
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+  plan      PlanTier @default(FREE)
+  planStartedAt DateTime? @map("plan_started_at")
+  planRenewsAt  DateTime? @map("plan_renews_at")
+  extraInstanceCredits Int @default(0) @map("extra_instance_credits")
+  extraWorkflowCredits Int @default(0) @map("extra_workflow_credits")
+
+  memberships      Membership[]
+  n8nInstances     N8nInstance[]
+  workflows        Workflow[]
+  workflowVersions WorkflowVersion[]
+  auditLogs        AuditLog[]
+  settings         OrgSettings?
+  ssoConfig        OrgSsoConfig?
+  ssoLoginRequests SsoLoginRequest[]
+  billingUsageSnapshots BillingUsageSnapshot[]
+  workflowQuarantineEvents WorkflowQuarantineEvent[]
+  promotionRequests PromotionRequest[]
+
+  @@map("organizations")
+}
+
+model Membership {
+  id             String   @id @default(uuid())
+  userId         String   @map("user_id")
+  organizationId String   @map("organization_id")
+  role           String   @default("member")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+  @@map("memberships")
+}
+
+model N8nInstance {
+  id              String    @id @default(uuid())
+  organizationId  String    @map("organization_id")
+  name            String
+  baseUrl         String    @map("base_url")
+  apiKeyEncrypted String    @map("api_key_encrypted")
+  apiKeyIv        String    @map("api_key_iv")
+  apiKeyTag       String    @map("api_key_tag")
+  status          String    @default("disconnected")
+  lastSeenAt      DateTime? @map("last_seen_at")
+  webhookSecret   String?   @map("webhook_secret")
+  environment     String    @default("production") // production, staging, development, or custom
+  envColor        String?   @map("env_color") // Custom color for the environment badge
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  workflows    Workflow[]
+
+  @@map("n8n_instances")
+}
+
+model Workflow {
+  id             String    @id @default(uuid())
+  organizationId String    @map("organization_id")
+  n8nInstanceId  String    @map("n8n_instance_id")
+  n8nWorkflowId  String    @map("n8n_workflow_id")
+  name           String
+  active         Boolean   @default(false)
+  environment    String    @default("development") // development, staging, production
+  status         String    @default("active")
+  quarantineReason String? @map("quarantine_reason")
+  quarantineConfig Json?   @map("quarantine_config")
+  quarantineSince DateTime? @map("quarantine_since")
+  promotedFrom   String?   @map("promoted_from") // ID of source workflow if promoted
+  promotedAt     DateTime? @map("promoted_at")
+  lastSnapshotAt DateTime? @map("last_snapshot_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  n8nInstance  N8nInstance           @relation(fields: [n8nInstanceId], references: [id], onDelete: Cascade)
+  versions     WorkflowVersion[]
+  executions   WorkflowExecution[]
+  variables    WorkflowVariable[]
+  quarantineEvents WorkflowQuarantineEvent[]
+  promotionRequests PromotionRequest[]
+
+  @@unique([n8nInstanceId, n8nWorkflowId])
+  @@map("workflows")
+}
+
+model WorkflowVariable {
+  id          String   @id @default(uuid())
+  workflowId  String   @map("workflow_id")
+  key         String
+  value       String
+  isSecret    Boolean  @default(false) @map("is_secret")
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  workflow Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@unique([workflowId, key])
+  @@map("workflow_variables")
+}
+
+model WorkflowExecution {
+  id              String    @id @default(uuid())
+  workflowId      String    @map("workflow_id")
+  n8nExecutionId  String    @map("n8n_execution_id")
+  status          String    // success, error, canceled, waiting, running
+  mode            String    // manual, trigger, webhook, retry, cli
+  startedAt       DateTime  @map("started_at")
+  stoppedAt       DateTime? @map("stopped_at")
+  durationMs      Int?      @map("duration_ms")
+  errorMessage    String?   @map("error_message")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  workflow Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@unique([workflowId, n8nExecutionId])
+  @@index([workflowId, startedAt])
+  @@map("workflow_executions")
+}
+
+model WorkflowVersion {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  workflowId     String   @map("workflow_id")
+  versionNumber  Int      @default(1) @map("version_number")
+  hash           String
+  jsonContent    Json     @map("json_content")
+  label          String?
+  variablesSnapshot Json? @map("variables_snapshot")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  workflow     Workflow     @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  promotionRequests PromotionRequest[] @relation("promotion_source_version")
+
+  @@index([workflowId, createdAt])
+  @@map("workflow_versions")
+}
+
+model AuditLog {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  actorUserId    String?  @map("actor_user_id")
+  action         String
+  entityType     String   @map("entity_type")
+  entityId       String   @map("entity_id")
+  metadata       Json     @default("{}")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actor        User?        @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@map("audit_logs")
+}
+
+model PromotionRequest {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  workflowId     String   @map("workflow_id")
+  sourceVersionId String? @map("source_version_id")
+  targetEnvironment String @map("target_environment")
+  targetInstanceId String? @map("target_instance_id")
+  status         String   @default("draft")
+  checklist      Json     @default("[]")
+  variablesDiff  Json?    @map("variables_diff")
+  diffSummary    Json?    @map("diff_summary")
+  createdById    String   @map("created_by_id")
+  reviewerId     String?  @map("reviewer_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  approvedAt     DateTime? @map("approved_at")
+  deployedAt     DateTime? @map("deployed_at")
+  notes          String?  @map("notes")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  workflow     Workflow     @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  sourceVersion WorkflowVersion? @relation("promotion_source_version", fields: [sourceVersionId], references: [id], onDelete: SetNull)
+  createdBy    User         @relation("promotion_creator", fields: [createdById], references: [id], onDelete: Cascade)
+  reviewer     User?        @relation("promotion_reviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status])
+  @@index([workflowId, status])
+  @@map("promotion_requests")
+}
+
+model OrgSettings {
+  organizationId            String  @id @map("organization_id")
+  slackWebhookUrlEncrypted  String? @map("slack_webhook_url_encrypted")
+  slackWebhookUrlIv         String? @map("slack_webhook_url_iv")
+  slackWebhookUrlTag        String? @map("slack_webhook_url_tag")
+  alertEmails               Json?   @map("alert_emails")
+  teamsWebhookUrlEncrypted  String? @map("teams_webhook_url_encrypted")
+  teamsWebhookUrlIv         String? @map("teams_webhook_url_iv")
+  teamsWebhookUrlTag        String? @map("teams_webhook_url_tag")
+  customWebhookUrlEncrypted String? @map("custom_webhook_url_encrypted")
+  customWebhookUrlIv        String? @map("custom_webhook_url_iv")
+  customWebhookUrlTag       String? @map("custom_webhook_url_tag")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("org_settings")
+}
+
+model OrgSsoConfig {
+  id                     String   @id @default(uuid())
+  organizationId         String   @unique @map("organization_id")
+  provider               String   @default("generic")
+  domainHint             String?  @map("domain_hint")
+  issuerUrl              String?  @map("issuer_url")
+  loginUrl               String?  @map("login_url")
+  audience               String?  @map("audience")
+  defaultRole            String   @default("member") @map("default_role")
+  enabled                Boolean  @default(false)
+  enforceForAll          Boolean  @default(false) @map("enforce_for_all")
+  metadata               Json?    @map("metadata")
+  sharedSecretEncrypted  String?  @map("shared_secret_encrypted")
+  sharedSecretIv         String?  @map("shared_secret_iv")
+  sharedSecretTag        String?  @map("shared_secret_tag")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("org_sso_configs")
+}
+
+model SsoLoginRequest {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  email          String
+  nonce          String
+  expiresAt      DateTime @map("expires_at")
+  consumedAt     DateTime? @map("consumed_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, email])
+  @@map("sso_login_requests")
+}
+
+model BillingUsageSnapshot {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  month          DateTime
+  instances      Int      @default(0)
+  workflows      Int      @default(0)
+  costInCents    Int      @default(0) @map("cost_in_cents")
+  currencyCode   String   @default("USD") @map("currency_code")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, month])
+  @@index([organizationId, month])
+  @@map("billing_usage_snapshots")
+}
+model WorkflowQuarantineEvent {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  workflowId     String   @map("workflow_id")
+  action         String
+  reason         String?
+  metadata       Json?    @map("metadata")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  workflow     Workflow     @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@index([workflowId, createdAt])
+  @@map("workflow_quarantine_events")
+}

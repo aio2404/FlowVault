@@ -1,0 +1,24 @@
+{
+  "name": "n8nback",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@9.1.0",
+  "scripts": {
+    "dev": "pnpm run --parallel dev",
+    "build": "pnpm run --filter=./apps/* build",
+    "test": "pnpm --filter @n8nback/api test",
+    "db:generate": "pnpm --filter @n8nback/api prisma generate",
+    "db:push": "pnpm --filter @n8nback/api prisma db push",
+    "db:migrate": "pnpm --filter @n8nback/api prisma migrate dev",
+    "db:seed": "pnpm --filter @n8nback/api prisma db seed",
+    "db:studio": "pnpm --filter @n8nback/api prisma studio",
+    "lint": "pnpm -r run lint",
+    "typecheck": "pnpm -r run typecheck",
+    "qa": "pnpm lint && pnpm --filter @n8nback/api test && pnpm --filter @n8nback/web lint",
+    "clean": "pnpm run --parallel clean"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  }
+}
+

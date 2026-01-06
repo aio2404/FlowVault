@@ -1,0 +1,44 @@
+---
+- name: Post-deploy smoke tests
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    api_url: "{{ lookup('env', 'FLOWVAULT_API_URL') | default('https://api.example.com', true) }}"
+    web_url: "{{ lookup('env', 'FLOWVAULT_WEB_URL') | default('https://app.example.com', true) }}"
+    health_timeout: 30
+
+  tasks:
+    - name: Hit API health endpoint
+      uri:
+        url: "{{ api_url }}/health"
+        method: GET
+        status_code: 200
+        return_content: true
+        timeout: "{{ health_timeout }}"
+      register: api_health
+
+    - name: Assert API is healthy
+      assert:
+        that:
+          - api_health.status == 200
+        fail_msg: "API health check failed at {{ api_url }}/health"
+
+    - name: Hit Web root
+      uri:
+        url: "{{ web_url }}/"
+        method: GET
+        status_code: 200
+        timeout: "{{ health_timeout }}"
+      register: web_health
+
+    - name: Assert Web root is reachable
+      assert:
+        that:
+          - web_health.status == 200
+        fail_msg: "Web UI not reachable at {{ web_url }}"
+
+    - name: Report success
+      debug:
+        msg: "Smoke tests passed: API {{ api_health.status }}, Web {{ web_health.status }}"

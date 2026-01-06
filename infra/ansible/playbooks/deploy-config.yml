@@ -1,0 +1,33 @@
+---
+- name: Push environment configuration to SSM Parameter Store
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    parameters:
+      - name: "{{ ssm_parameter_prefix }}/DATABASE_URL"
+        value: ""
+        type: "SecureString"
+      - name: "{{ ssm_parameter_prefix }}/JWT_SECRET"
+        value: ""
+        type: "SecureString"
+
+  tasks:
+    - name: Validate parameter values
+      assert:
+        that:
+          - item.value is string
+          - item.value | length > 0
+        fail_msg: "Parameter {{ item.name }} must have a value"
+      loop: "{{ parameters }}"
+
+    - name: Write parameters
+      aws_ssm_parameter_store:
+        name: "{{ item.name }}"
+        description: "Managed by Ansible"
+        region: "{{ aws_region }}"
+        string_type: "{{ item.type }}"
+        value: "{{ item.value }}"
+        overwrite: true
+      loop: "{{ parameters }}"

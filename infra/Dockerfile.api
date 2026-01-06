@@ -1,0 +1,36 @@
+FROM node:20-alpine AS base
+
+# Install pnpm
+RUN corepack enable && corepack prepare pnpm@9.1.0 --activate
+
+WORKDIR /app
+
+# Copy workspace config
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
+COPY tsconfig.base.json ./
+
+# Copy packages
+COPY packages/shared/package.json packages/shared/
+COPY apps/api/package.json apps/api/
+
+# Install dependencies
+RUN pnpm install --frozen-lockfile || pnpm install
+
+# Copy source
+COPY packages/shared packages/shared
+COPY apps/api apps/api
+
+# Build shared package
+RUN pnpm --filter @n8nback/shared build
+
+# Generate Prisma client
+RUN pnpm --filter @n8nback/api prisma generate
+
+# Expose port
+EXPOSE 3001
+
+# Run API
+CMD ["pnpm", "--filter", "@n8nback/api", "dev"]
+
+
+

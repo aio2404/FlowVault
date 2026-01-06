@@ -1,0 +1,51 @@
+---
+- name: Run Prisma migrations via one-off ECS task
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    service_name: "{{ lookup('env', 'SERVICE_NAME') | default('api', true) }}"
+    image_tag: "latest"
+    command:
+      - pnpm
+      - --filter
+      - "@n8nback/api"
+      - exec
+      - prisma
+      - migrate
+      - deploy
+
+  tasks:
+    - name: "Lookup latest task definition for {{ service_name }}"
+    community.aws.ecs_taskdefinition_info:
+      task_definition: "{{ service_name }}"
+    register: task_info
+
+    - name: Fail if task definition not found
+    fail:
+      msg: "Task definition for {{ service_name }} not found"
+    when: task_info.taskdefinitions | length == 0
+
+    - name: Run one-off migration task
+    amazon.aws.ecs_task:
+      region: "{{ aws_region }}"
+      cluster: "{{ cluster_name }}"
+      launch_type: FARGATE
+      task_definition: "{{ task_info.taskdefinitions[-1].taskDefinitionArn }}"
+      network_configuration:
+        subnets: "{{ subnet_ids }}"
+        security_groups: "{{ security_groups }}"
+        assignPublicIp: false
+      overrides:
+        containerOverrides:
+          - name: "{{ service_name }}-container"
+            command: "{{ command }}"
+      started_by: "ansible-migrations"
+      wait: true
+      wait_timeout: 600
+    register: migration_task
+
+    - name: Show task result
+    debug:
+      var: migration_task

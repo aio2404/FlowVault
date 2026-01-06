@@ -1,0 +1,172 @@
+{
+    "name": "FlowVault Launch Teasers",
+    "active": false,
+    "nodes": [
+      {
+        "id": "1",
+        "name": "Launch Schedule",
+        "type": "n8n-nodes-base.cron",
+        "typeVersion": 1,
+        "position": [300, 500],
+        "parameters": {
+          "mode": "Every Week",
+          "weekly": [
+            {
+              "dayOfWeek": "2",
+              "hour": 10,
+              "minute": 0
+            },
+            {
+              "dayOfWeek": "4",
+              "hour": 15,
+              "minute": 0
+            }
+          ],
+          "timezone": "Europe/Paris"
+        }
+      },
+      {
+        "id": "2",
+        "name": "Build Context",
+        "type": "n8n-nodes-base.function",
+        "typeVersion": 1,
+        "position": [560, 500],
+        "parameters": {
+          "functionCode": "const launchDate = new Date('2026-01-01T00:00:00Z');\nconst now = new Date();\nconst msPerWeek = 7 * 24 * 60 * 60 * 1000;\nconst weeksLeft = Math.max(0, Math.ceil((launchDate - now) / msPerWeek));\nconst themes = [\n  { topic: 'sécurité & conformité', keywords: ['workflow backup', 'audit log', 'SSO'] },\n  { topic: 'diff visuel & rollback', keywords: ['visual diff', 'rollback', 'Dev→Prod'] },\n  { topic: 'monitoring & billing', keywords: ['usage dashboard', 'alerts', 'cost control'] },\n  { topic: 'support & marketing', keywords: ['support SLA', 'marketing toolkit', 'automation launch'] }\n];\nconst pick = themes[Math.floor(Math.random() * themes.length)];\nreturn [{\n  json: {\n    weeksLeft,\n    topic: pick.topic,\n    keywords: pick.keywords.join(', '),\n    tone: 'professionnel mais accessible',\n    callToAction: 'Join the waitlist → https://flowvault.dev'\n  }\n}];"
+        }
+      },
+      {
+        "id": "3",
+        "name": "Generate Copy",
+        "type": "n8n-nodes-base.openAi",
+        "typeVersion": 2,
+        "position": [800, 500],
+        "parameters": {
+          "operation": "chat",
+          "model": "gpt-4o-mini",
+          "systemMessage": "You are FlowVault's marketing copywriter.",
+          "messages": [
+            {
+              "role": "user",
+              "content": "Create one X/Twitter post (max 275 characters) teasing FlowVault before its 1 Jan 2026 launch. Tone: {{$json.tone}}.\nMention weeks left ({{$json.weeksLeft}}) and focus on {{$json.topic}}.\nInclude keywords: {{$json.keywords}}.\nAdd CTA {{$json.callToAction}} and 1-2 hashtags chosen from #n8n #automation #nocode #workflowsecurity.\nReturn plain text only."
+            }
+          ],
+          "options": {}
+        },
+        "credentials": {
+          "openAiApi": {
+            "id": "YOUR_OPENAI_CREDENTIAL_ID",
+            "name": "OpenAI Account"
+          }
+        }
+      },
+      {
+        "id": "4",
+        "name": "Clamp Length",
+        "type": "n8n-nodes-base.function",
+        "typeVersion": 1,
+        "position": [1040, 500],
+        "parameters": {
+          "functionCode": "const text = $json.content?.trim() || $json.data?.[0]?.text || $json.text || '';\nconst maxLen = 275;\nlet final = text;\nif (final.length > maxLen) {\n  final = final.substring(0, maxLen - 3).trim() + '…';\n}\nreturn [{ json: { tweet: final, weeksLeft: $json.weeksLeft } }];"
+        }
+      },
+      {
+        "id": "5",
+        "name": "Launch Passed?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 1,
+        "position": [1280, 500],
+        "parameters": {
+          "conditions": {
+            "number": [
+              {
+                "value1": "={{$json.weeksLeft}}",
+                "operation": "smaller",
+                "value2": 1
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "6",
+        "name": "Publish Tweet",
+        "type": "n8n-nodes-base.twitterV2",
+        "typeVersion": 1,
+        "position": [1520, 420],
+        "parameters": {
+          "operation": "createTweet",
+          "text": "={{$json.tweet}}"
+        },
+        "credentials": {
+          "twitterOAuth2Api": {
+            "id": "YOUR_TWITTER_V2_CREDENTIAL_ID",
+            "name": "Twitter App"
+          }
+        }
+      }
+    ],
+    "connections": {
+      "Launch Schedule": {
+        "main": [
+          [
+            {
+              "node": "Build Context",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Context": {
+        "main": [
+          [
+            {
+              "node": "Generate Copy",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Generate Copy": {
+        "main": [
+          [
+            {
+              "node": "Clamp Length",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Clamp Length": {
+        "main": [
+          [
+            {
+              "node": "Launch Passed?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Launch Passed?": {
+        "main": [
+          [
+            {
+              "node": "Publish Tweet",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          []
+        ]
+      }
+    },
+    "settings": {
+      "timezone": "Europe/Paris"
+    },
+    "versionId": "1"
+  }
+  

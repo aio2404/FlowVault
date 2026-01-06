@@ -1,0 +1,53 @@
+aws_region   = "eu-west-3"
+aws_profile  = "n8nback-dev"
+project_name = "n8nback"
+environment  = "staging"
+
+vpc_cidr = "10.20.0.0/16"
+
+public_subnets = [
+  { cidr = "10.20.0.0/20", az = "eu-west-3a" },
+  { cidr = "10.20.16.0/20", az = "eu-west-3b" },
+]
+
+private_subnets = [
+  { cidr = "10.20.32.0/20", az = "eu-west-3a" },
+  { cidr = "10.20.48.0/20", az = "eu-west-3b" },
+]
+
+rds_db_name     = "n8nback"
+rds_username    = "n8nadmin"
+rds_password    = "CHANGE_ME"
+rds_instance_class = "db.t4g.small"
+rds_allocated_storage = 40
+
+api_image    = "123456789012.dkr.ecr.eu-west-3.amazonaws.com/n8nback-api:latest"
+web_image    = "123456789012.dkr.ecr.eu-west-3.amazonaws.com/n8nback-web:latest"
+worker_image = "123456789012.dkr.ecr.eu-west-3.amazonaws.com/n8nback-worker:latest"
+
+common_environment = {
+  NODE_ENV        = "production"
+  DATABASE_URL    = "postgresql://n8nadmin:CHANGE_ME@REPLACED_AT_RUNTIME:5432/n8nback"
+  QUEUE_DRIVER    = "sqs"
+}
+
+api_environment = {
+  PORT = "3001"
+}
+
+web_environment = {
+  NEXT_PUBLIC_API_URL = "https://api.example.com"
+}
+
+worker_environment = {
+  CONCURRENCY = "2"
+}
+
+execution_policy_arns = [
+  "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
+]
+
+task_policy_arns = [
+  # Example: access to SSM parameters / Secrets Manager
+  "arn:aws:iam::aws:policy/AmazonSSMReadOnlyAccess",
+]

@@ -1,0 +1,9 @@
+---
+aws_region: eu-west-3
+cluster_name: n8nback-dev-cluster
+subnet_ids: []
+security_groups: []
+task_execution_role_arn: ""
+task_role_arn: ""
+api_task_definition: ""
+ssm_parameter_prefix: "/n8nback/dev"
